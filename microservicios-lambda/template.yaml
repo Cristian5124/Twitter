@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Twitter Clone - Arquitectura de Microservicios con Lambda
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        USERS_TABLE: !Ref UsuariosTable
+        POSTS_TABLE: !Ref PostsTable
+        COMMENTS_TABLE: !Ref ComentariosTable
+        LIKES_TABLE: !Ref LikesTable
+        JWT_SECRET: MyS3cr3tK3yF0rJWTT0k3nG3n3r4t10nTh4tSh0uldB3V3ryS3cur3AndL0ng
+
+Resources:
+  # DynamoDB Tables
+  UsuariosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-usuarios
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  PostsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-posts
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: usuarioId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: usuarioId-index
+          KeySchema:
+            - AttributeName: usuarioId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ComentariosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-comentarios
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: postId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: postId-index
+          KeySchema:
+            - AttributeName: postId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  LikesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-postlikes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: postId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: postId
+          KeyType: HASH
+        - AttributeName: userId
+          KeyType: RANGE
+
+  # API Gateway
+  TwitterCloneApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # Lambda Functions
+  UsuariosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-usuarios-service
+      CodeUri: usuarios-service/
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsuariosTable
+      Events:
+        Register:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /auth/register
+            Method: post
+        Login:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /auth/login
+            Method: post
+        GetUsuarios:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /usuarios
+            Method: get
+
+  PostsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-posts-service
+      CodeUri: posts-service/
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PostsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsuariosTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ComentariosTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LikesTable
+      Events:
+        CreatePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts
+            Method: post
+        GetPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts
+            Method: get
+        GetPostsByUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/usuario/{usuarioId}
+            Method: get
+        LikePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/like
+            Method: put
+        LikePostOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/like
+            Method: options
+        GetComentarios:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/comentarios
+            Method: get
+        GetComentariosOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/comentarios
+            Method: options
+        CreateComentario:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/comentarios
+            Method: post
+        CreateComentarioOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/comentarios
+            Method: options
+        GetPostStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/stats
+            Method: get
+        GetPostStatsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /posts/{postId}/stats
+            Method: options
+
+  StreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-stream-service
+      CodeUri: stream-service/
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PostsTable
+      Events:
+        GetStream:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /stream
+            Method: get
+        GetStreamPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TwitterCloneApi
+            Path: /stream/posts
+            Method: get
+
+  # S3 Bucket for Frontend
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'twitter-clone-frontend-${AWS::AccountId}'
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+
+Outputs:
+  ApiUrl:
+    Description: URL de la API Gateway
+    Value: !Sub 'https://${TwitterCloneApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  
+  FrontendUrl:
+    Description: URL del Frontend en S3
+    Value: !GetAtt FrontendBucket.WebsiteURL
+  
+  UsuariosTableName:
+    Description: Nombre de la tabla de usuarios
+    Value: !Ref UsuariosTable
+  
+  PostsTableName:
+    Description: Nombre de la tabla de posts
+    Value: !Ref PostsTable

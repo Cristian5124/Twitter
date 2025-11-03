@@ -1,0 +1,227 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Twitter Clone - Arquitectura de Microservicios con Lambda
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        USERS_TABLE:
+          Ref: UsuariosTable
+        POSTS_TABLE:
+          Ref: PostsTable
+        JWT_SECRET: MyS3cr3tK3yF0rJWTT0k3nG3n3r4t10nTh4tSh0uldB3V3ryS3cur3AndL0ng
+Resources:
+  UsuariosTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-usuarios
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      - AttributeName: username
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: username-index
+        KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+    Metadata:
+      SamResourceId: UsuariosTable
+  PostsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: twitter-clone-posts
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      - AttributeName: usuarioId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: usuarioId-index
+        KeySchema:
+        - AttributeName: usuarioId
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+    Metadata:
+      SamResourceId: PostsTable
+  TwitterCloneApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
+        AllowHeaders: '''Content-Type,Authorization'''
+        AllowOrigin: '''*'''
+    Metadata:
+      SamResourceId: TwitterCloneApi
+  UsuariosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-usuarios-service
+      CodeUri: s3://twitter-clone-sam-deploy-975050052381-20251103/2d76905177fa0dbd81e0ec3b2e97c334
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: UsuariosTable
+      Events:
+        Register:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /auth/register
+            Method: post
+        Login:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /auth/login
+            Method: post
+        GetUsuarios:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /usuarios
+            Method: get
+    Metadata:
+      SamResourceId: UsuariosFunction
+  PostsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-posts-service
+      CodeUri: s3://twitter-clone-sam-deploy-975050052381-20251103/3d0fca3c88c5ce7adb3ba1ea947a985b
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: PostsTable
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: UsuariosTable
+      Events:
+        CreatePost:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /posts
+            Method: post
+        GetPosts:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /posts
+            Method: get
+        GetPostsByUser:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /posts/usuario/{usuarioId}
+            Method: get
+        LikePost:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /posts/{postId}/like
+            Method: put
+    Metadata:
+      SamResourceId: PostsFunction
+  StreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: twitter-clone-stream-service
+      CodeUri: s3://twitter-clone-sam-deploy-975050052381-20251103/d90a784451291606070a022364075c7f
+      Handler: index.handler
+      Role: arn:aws:iam::975050052381:role/LabRole
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: PostsTable
+      Events:
+        GetStream:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /stream
+            Method: get
+        GetStreamPosts:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: TwitterCloneApi
+            Path: /stream/posts
+            Method: get
+    Metadata:
+      SamResourceId: StreamFunction
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: twitter-clone-frontend-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+    Metadata:
+      SamResourceId: FrontendBucket
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: FrontendBucket
+      PolicyDocument:
+        Statement:
+        - Sid: PublicReadGetObject
+          Effect: Allow
+          Principal: '*'
+          Action: s3:GetObject
+          Resource:
+            Fn::Sub: ${FrontendBucket.Arn}/*
+    Metadata:
+      SamResourceId: FrontendBucketPolicy
+Outputs:
+  ApiUrl:
+    Description: URL de la API Gateway
+    Value:
+      Fn::Sub: https://${TwitterCloneApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+  FrontendUrl:
+    Description: URL del Frontend en S3
+    Value:
+      Fn::GetAtt:
+      - FrontendBucket
+      - WebsiteURL
+  UsuariosTableName:
+    Description: Nombre de la tabla de usuarios
+    Value:
+      Ref: UsuariosTable
+  PostsTableName:
+    Description: Nombre de la tabla de posts
+    Value:
+      Ref: PostsTable
