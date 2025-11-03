@@ -23,6 +23,13 @@ Este proyecto es un clon simplificado de Twitter que permite a los usuarios regi
 
 El proyecto se desarrollo siguiendo una arquitectura evolutiva: primera fase monolito Spring Boot, segunda fase separacion en microservicios con AWS Lambda.
 
+<img width="1845" height="1033" alt="image" src="https://github.com/user-attachments/assets/d891a4ec-5c5f-4d2b-9663-7c54c0ddee1e" />
+
+<img width="1846" height="1035" alt="image" src="https://github.com/user-attachments/assets/50bda173-e66f-4761-9931-d620b7a55370" />
+
+<img width="1850" height="1034" alt="image" src="https://github.com/user-attachments/assets/4a682b58-22c9-483b-a39b-4ed1e7cc0af7" />
+
+
 ## Arquitectura
 
 ### Arquitectura del Monolito
@@ -130,15 +137,211 @@ Paso 3: Desplegar frontend en S3. cd frontend-web, deploy-s3.bat en Windows o de
 
 Verificar despliegue accediendo a la URL del bucket S3.
 
+<img width="1847" height="1033" alt="image" src="https://github.com/user-attachments/assets/efbc828c-90c2-465e-8065-28cc69285566" />
+
+<img width="1844" height="1042" alt="image" src="https://github.com/user-attachments/assets/84b26e45-717a-4d2d-9f99-054876b41c46" />
+
+<img width="1845" height="601" alt="image" src="https://github.com/user-attachments/assets/4e82b1aa-c63c-4c80-8217-d0b8128e3886" />
+
+<img width="1847" height="1032" alt="image" src="https://github.com/user-attachments/assets/e086b223-3dae-4cc9-9aeb-ea5579f80c5b" />
+
 ## Pruebas
 
-Pruebas manuales del monolito incluyen registro de usuario, login, creacion de posts y obtencion del stream. Para el frontend, probar registro, login, creacion de posts y validacion de 140 caracteres. Las pruebas de microservicios son similares pero con la URL de API Gateway.
+### Pruebas Manuales del Monolito
 
-Ejemplo de registro: curl -X POST http://localhost:8080/api/auth/register -H "Content-Type: application/json" -d '{"username": "angie_ramos", "email": "angie@example.com", "password": "password123"}'
+#### 1. Registro de Usuario
 
-Para microservicios: curl -X POST https://tu-api-gateway.execute-api.us-east-1.amazonaws.com/prod/auth/register -H "Content-Type: application/json" -d '{"username": "test_user", "email": "test@example.com", "password": "test123"}'
+```bash
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "angie_ramos",
+    "email": "angie@example.com",
+    "password": "password123",
+    "bio": "Estudiante de Ingeniería"
+  }'
+```
 
-Nota: En serverless se implementaron endpoints de comentarios y estadisticas por post, con toggle de likes por usuario.
+**Resultado Esperado:** 
+```json
+{
+  "message": "Usuario registrado exitosamente con id: 1"
+}
+```
+
+#### 2. Login
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "angie_ramos",
+    "password": "password123"
+  }'
+```
+
+**Resultado Esperado:**
+```json
+{
+  "token": "eyJhbGciOiJIUzUxMiJ9...",
+  "type": "Bearer",
+  "id": 1,
+  "username": "angie_ramos",
+  "email": "angie@example.com"
+}
+```
+
+Guarda el token para las siguientes peticiones.
+
+#### 3. Crear Post (Requiere autenticación)
+
+```bash
+curl -X POST http://localhost:8080/api/posts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TU_TOKEN_AQUI" \
+  -d '{
+    "contenido": "Hola"
+  }'
+```
+
+**Resultado Esperado:**
+```json
+{
+  "id": 1,
+  "contenido": "Hola",
+  "usuario": {
+    "id": 1,
+    "username": "angie_ramos",
+    "email": "angie@example.com"
+  },
+  "likes": 0,
+  "createdAt": "2025-11-02T10:30:00"
+}
+```
+
+#### 4. Obtener Stream de Posts
+
+```bash
+curl -X GET http://localhost:8080/api/stream/posts
+```
+
+**Resultado Esperado:**
+```json
+[
+  {
+    "id": 1,
+    "contenido": "Hola",
+    "usuario": {
+      "id": 1,
+      "username": "angie_ramos",
+      "email": "angie@example.com"
+    },
+    "likes": 0,
+    "createdAt": "2025-11-02T10:30:00"
+  }
+]
+```
+
+#### 5. Validación de 140 Caracteres
+
+```bash
+curl -X POST http://localhost:8080/api/posts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TU_TOKEN_AQUI" \
+  -d '{
+    "contenido": "Este es un post muy largo que excede los 140 caracteres permitidos para probar la validación del sistema Este es un post muy largo que excede los 140 caracteres"
+  }'
+```
+
+**Resultado Esperado:**
+```json
+{
+  "message": "El post no puede exceder 140 caracteres"
+}
+```
+
+### Pruebas de la Interfaz Web
+
+#### Test Case 1: Registro Exitoso
+1. Abrir `http://localhost:8000` (o la URL de S3)
+2. Hacer clic en "Registrarse"
+3. Completar el formulario:
+   - Username: `cristian_polo`
+   - Email: `cristian@example.com`
+   - Password: `test1234`
+   - Bio: `Desarrollador Full Stack`
+4. Click en "Registrarse"
+5. **Resultado esperado:** Mensaje de éxito y redirección al login
+
+#### Test Case 2: Login Exitoso
+1. En la pantalla de login, ingresar:
+   - Username: `cristian_polo`
+   - Password: `test1234`
+2. Click en "Iniciar Sesión"
+3. **Resultado esperado:** 
+   - Se muestra el nombre de usuario en el header
+   - Aparece la sección para crear posts
+   - Se visualiza el stream de posts
+
+#### Test Case 3: Crear Post
+1. Con sesión iniciada, en el textarea escribir: `Probando Twitter Clone`
+2. Verificar que el contador muestre: `25/140`
+3. Click en "Publicar"
+4. **Resultado esperado:**
+   - El post aparece inmediatamente en el stream
+   - El textarea se limpia
+   - El contador vuelve a `0/140`
+
+#### Test Case 4: Validación de 140 Caracteres
+1. Intentar escribir más de 140 caracteres
+2. **Resultado esperado:** 
+   - El textarea no permite más de 140 caracteres
+   - El contador se pone en rojo al pasar de 120 caracteres
+
+#### Test Case 5: Refrescar Stream
+1. Click en el botón "Actualizar"
+2. **Resultado esperado:** Los posts se recargan correctamente
+
+#### Test Case 6: Logout
+1. Click en "Cerrar Sesión"
+2. Resultado esperado:
+   - Se vuelve a la pantalla de login
+   - El token se elimina del localStorage
+
+### Reporte de Pruebas
+
+| ID | Prueba | Resultado | Evidencia |
+|----|--------|-----------|-----------|
+| T001 | Registro de usuario válido | PASS | Usuario creado correctamente |
+| T002 | Registro con username duplicado | PASS | Error: "El username ya existe" |
+| T003 | Login con credenciales válidas | PASS | Token JWT generado |
+| T004 | Login con credenciales inválidas | PASS | Error: "Credenciales inválidas" |
+| T005 | Crear post autenticado | PASS | Post creado y visible en stream |
+| T006 | Crear post sin autenticación | PASS | Error 401 Unauthorized |
+| T007 | Post con más de 140 caracteres | PASS | Error de validación |
+| T008 | Post con contenido vacío | PASS | Error: "El contenido es obligatorio" |
+| T009 | Visualizar stream público | PASS | Lista de posts ordenada por fecha |
+| T010 | Persistencia de datos (H2) | PASS | Datos disponibles durante sesión |
+| T011 | CORS habilitado | PASS | Frontend puede consumir API |
+| T012 | JWT expira después de 24h | PASS | Token con expiración configurada |
+
+### Pruebas de Microservicios Lambda
+
+Las pruebas de los microservicios Lambda son similares, solo cambia la URL base:
+
+```bash
+# Ejemplo con API Gateway
+curl -X POST https://tu-api-gateway.execute-api.us-east-1.amazonaws.com/prod/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "test_user",
+    "email": "test@example.com",
+    "password": "test123"
+  }'
+```
+
+Nota: En la versión serverless se implementaron los endpoints de comentarios y estadísticas por post (likes y conteo de comentarios). El botón Like hace toggle por usuario (like/unlike).
+
 
 ## API Documentation
 
