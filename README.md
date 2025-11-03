@@ -383,6 +383,4 @@ Este proyecto es de uso academico para la materia de Arquitecturas Empresariales
 
 ---
 
-Nota: Este proyecto fue desarrollado con fines educativos. No esta disenado para produccion y requeriria mejoras adicionales de seguridad, escalabilidad y monitoreo para un entorno real.
-
 Fecha de entrega: Noviembre 2025
